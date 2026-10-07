@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#070b10">
+<title>NEUROLENS — Vision Scanner</title>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3"></script>
+<style>
+:root{--bg:#06090d;--panel:#0b1117;--panel2:#0e171e;--line:#1c2a32;--text:#edfaff;--muted:#81939b;--cyan:#66e7f7;--green:#69e6ad;--amber:#ffd36b}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Arial,sans-serif}
+button,input{font:inherit}.app{height:100dvh;display:flex;flex-direction:column}
+header{height:60px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid var(--line);background:#070b10}
+.brand{display:flex;align-items:center;gap:10px}.mark{width:32px;height:32px;border:1px solid var(--cyan);border-radius:10px;position:relative;box-shadow:0 0 22px #66e7f70b}.mark:before{content:"";position:absolute;left:7px;right:7px;top:15px;height:1px;background:var(--cyan)}.mark:after{content:"";position:absolute;top:7px;bottom:7px;left:15px;width:1px;background:var(--cyan)}
+h1{font-size:14px;letter-spacing:3.4px;margin:0}.sub{font-size:7px;color:var(--muted);letter-spacing:1.4px;margin-top:3px}
+.status{display:flex;gap:7px;align-items:center;font-size:8px;color:#a9bac0;letter-spacing:1px}.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px #69e6ad}.dot.busy{background:var(--amber);box-shadow:0 0 12px #ffd36b}
+main{flex:1;min-height:0;padding:8px;display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:8px;overflow:hidden}
+.viewport{position:relative;min-width:0;min-height:0;overflow:hidden;border:1px solid var(--line);border-radius:16px;background:#000}
+.viewport video,.viewport canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.viewport canvas{pointer-events:none}
+.hud{position:absolute;inset:0;pointer-events:none}.pill{position:absolute;top:10px;padding:7px 9px;border:1px solid #66e7f725;background:#050b0fc9;border-radius:8px;color:#c9e6ea;font-size:7px;letter-spacing:1.1px;backdrop-filter:blur(7px)}.left{left:10px}.right{right:10px}
+.reticle{position:absolute;left:50%;top:50%;width:92px;height:92px;transform:translate(-50%,-50%);border:1px solid #66e7f72b;border-radius:50%}.reticle:before,.reticle:after{content:"";position:absolute;background:#66e7f755}.reticle:before{width:1px;height:28px;left:45px;top:32px}.reticle:after{height:1px;width:28px;left:32px;top:45px}
+.sweep{position:absolute;left:5%;right:5%;height:1px;background:linear-gradient(90deg,transparent,#66e7f7,transparent);opacity:.35;animation:sweep 5s ease-in-out infinite}@keyframes sweep{0%{top:12%}50%{top:88%}100%{top:12%}}
+.bottom{position:absolute;left:10px;right:10px;bottom:10px;display:flex;justify-content:space-between;color:#9eb2b8;font-size:7px;letter-spacing:1px}
+.message{position:absolute;inset:0;z-index:5;display:grid;place-items:center;background:#020609df;text-align:center;padding:24px}.message.hidden{display:none}.messagebox{max-width:380px}.messagebox strong{display:block;color:var(--cyan);font-size:13px;letter-spacing:1.7px}.messagebox span{display:block;color:#a5b6ba;font-size:9px;line-height:1.55;margin:8px 0 13px}.btn{border:1px solid var(--cyan);background:var(--cyan);color:#031014;border-radius:8px;padding:9px 12px;font-weight:850;font-size:8px;letter-spacing:1px;cursor:pointer}.btn.secondary{background:transparent;color:var(--cyan)}.btn:disabled{opacity:.45;cursor:not-allowed}
+.panel{min-width:0;min-height:0;background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column}
+.panelhead{padding:12px 13px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:10px}.panelhead h2{margin:0 0 3px;font-size:10px;letter-spacing:1.7px}.panelhead small{font-size:7px;color:var(--muted)}
+.list{flex:1;min-height:0;overflow:auto;padding:8px}.card{border:1px solid #1d2c34;border-radius:12px;background:var(--panel2);padding:10px;margin-bottom:7px}.card.primary{border-color:#66e7f755;box-shadow:0 0 25px #66e7f708}.top{display:flex;justify-content:space-between;gap:8px}.eyebrow{font-size:6px;color:var(--cyan);letter-spacing:1.2px}.name{font-size:15px;font-weight:850;margin-top:3px}.score{font-size:17px;color:var(--cyan);font-weight:900}.score small{font-size:7px;color:var(--muted)}.meter{height:3px;background:#fff1;border-radius:3px;margin:8px 0}.meter i{display:block;height:100%;background:var(--cyan);border-radius:3px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}.grid div{padding:6px;background:#fff5;border-radius:7px}.grid label{display:block;color:#6e838b;font-size:6px;letter-spacing:1px}.grid b{display:block;font-size:8px;margin-top:2px}.desc{margin:7px 0 0;color:#b3c3c7;font-size:8px;line-height:1.45}.hold{margin-top:6px;color:#7f959c;font-size:6px;letter-spacing:.7px}.empty{text-align:center;padding:30px 16px;color:var(--muted)}.empty strong{display:block;color:var(--cyan);font-size:9px;letter-spacing:1.2px}.empty span{display:block;font-size:8px;line-height:1.5;margin-top:6px}
+.search{padding:7px;border-top:1px solid var(--line);display:flex;gap:5px}.search input{min-width:0;flex:1;background:#071015;border:1px solid #203139;color:#e7f8fa;border-radius:8px;padding:8px;font-size:8px;outline:none}.search input:focus{border-color:#66e7f777}.search button{width:68px}
+.controls{padding:7px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;border-top:1px solid var(--line)}.controls .btn{padding:8px 5px}.stats{padding:7px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:5px}.stat{padding:7px;background:#fff4;border-radius:7px}.stat label{display:block;color:#70858c;font-size:6px;letter-spacing:1px}.stat b{display:block;font-size:8px;margin-top:2px}
+footer{height:21px;flex:none;border-top:1px solid var(--line);display:flex;align-items:center;padding:0 10px;color:#60747b;font-size:6px;letter-spacing:.65px}
+@media(max-width:850px){header{height:57px;padding:0 10px}main{display:flex;flex-direction:column;padding:6px;gap:6px}.viewport{height:56dvh;min-height:285px;max-height:56dvh;flex:none}.panel{height:calc(44dvh - 6px);max-height:44dvh;flex:none}footer{display:none}.list{padding:6px}.card{padding:8px}.name{font-size:13px}.panelhead{padding:9px 10px}.reticle{width:80px;height:80px}.reticle:before{left:39px}.reticle:after{top:39px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header><div class="brand"><div class="mark"></div><div><h1>NEUROLENS</h1><div class="sub">STABILIZED VISION / FAST TRACK + OPTIONAL DINO</div></div></div><div class="status"><i class="dot" id="dot"></i><span id="status">STARTING</span></div></header>
+<main>
+<section class="viewport">
+<video id="video" autoplay muted playsinline></video><canvas id="overlay"></canvas>
+<div class="hud"><span class="pill left">LIVE CAMERA</span><span class="pill right" id="modePill">FAST MODE</span><div class="reticle"></div><div class="sweep"></div><div class="bottom"><span id="visionText">SMOOTH TRACKING</span><span id="thresholdText">STABLE</span></div></div>
+<div id="message" class="message"><div class="messagebox"><strong id="messageTitle">STARTING VISION ENGINE</strong><span id="messageText">Camera starts first. The heavy DINO model is NOT loaded until you request AI verification, preventing the model from blocking the live view.</span><button id="start" class="btn" style="display:none">START SCANNER</button></div></div>
+</section>
+<aside class="panel">
+<div class="panelhead"><div><h2>OBJECT INTELLIGENCE</h2><small id="modelLine">LIGHTWEIGHT / LOW-LATENCY</small></div><small><span id="count">0</span> TARGETS</small></div>
+<div id="list" class="list"><div class="empty"><strong>READY</strong><span>Start the camera and keep an object inside the view.</span></div></div>
+<div class="search"><input id="custom" placeholder="DINO focus: charger, flower, helmet…"><button id="focus" class="btn secondary">FOCUS</button></div>
+<div class="controls"><button id="scan" class="btn">AI VERIFY</button><button id="auto" class="btn secondary">AUTO: OFF</button><button id="switch" class="btn secondary">SWITCH</button></div>
+<div class="stats"><div class="stat"><label>FAST MODEL</label><b id="model">LOADING</b></div><div class="stat"><label>AI CACHE</label><b id="cache">CHECKING</b></div><div class="stat"><label>FPS</label><b id="fps">—</b></div><div class="stat"><label>CONFIDENCE</label><b id="confidence">—</b></div></div>
+</aside>
+</main>
+<footer>NEUROLENS • CAMERA PREVIEW NEVER WAITS FOR DINO • MODEL FILES ARE BROWSER-CACHED • AI RESULTS ARE PROBABILISTIC</footer>
+</div>
+<script type="module">
+import {pipeline,env} from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/+esm';
+
+const $=id=>document.getElementById(id);
+const video=$('video'),overlay=$('overlay'),ctx=overlay.getContext('2d');
+const list=$('list'),status=$('status'),count=$('count'),fpsEl=$('fps'),confEl=$('confidence'),modelEl=$('model'),cacheEl=$('cache'),dot=$('dot');
+const msg=$('message'),msgTitle=$('messageTitle'),msgText=$('messageText'),startBtn=$('start'),scanBtn=$('scan'),autoBtn=$('auto'),switchBtn=$('switch'),focusBtn=$('focus'),custom=$('custom');
+const fastCanvas=document.createElement('canvas'),fastCtx=fastCanvas.getContext('2d',{willReadFrequently:false});
+const aiCanvas=document.createElement('canvas'),aiCtx=aiCanvas.getContext('2d',{willReadFrequently:false});
+
+const LABELS=['person','dog','cat','bird','horse','bicycle','car','motorcycle','bus','truck','train','airplane','boat','backpack','handbag','suitcase','umbrella','bottle','cup','bowl','fork','knife','spoon','book','clock','vase','scissors','laptop computer','computer mouse','computer keyboard','smartphone','remote control','television','camera','headphones','watch','chair','couch','dining table','bed','lamp','refrigerator','microwave','oven','toaster','plant','flower','sports ball','shoe','glasses','food','cake','pizza','fruit','box','tool','helmet','charger'];
+const INFO={person:['Person','Human','Human subject detected.'],dog:['Dog','Animal','Dog visual class detected.'],cat:['Cat','Animal','Cat visual class detected.'],bird:['Bird','Animal','Bird visual class detected.'],horse:['Horse','Animal','Horse visual class detected.'],bicycle:['Bicycle','Mobility','Two-wheeled vehicle detected.'],car:['Car','Vehicle','Road vehicle detected.'],motorcycle:['Motorcycle','Vehicle','Powered two-wheeled vehicle detected.'],bus:['Bus','Vehicle','Passenger road vehicle detected.'],truck:['Truck','Vehicle','Cargo road vehicle detected.'],train:['Train','Transport','Rail vehicle detected.'],airplane:['Airplane','Aircraft','Fixed-wing aircraft detected.'],boat:['Boat','Watercraft','Watercraft detected.'],backpack:['Backpack','Personal','Backpack-shaped object detected.'],handbag:['Handbag','Personal','Handbag-shaped object detected.'],suitcase:['Suitcase','Travel','Luggage detected.'],umbrella:['Umbrella','Personal','Umbrella-shaped object detected.'],bottle:['Bottle','Container','Bottle-shaped container detected.'],cup:['Cup','Drinkware','Cup-shaped object detected.'],bowl:['Bowl','Kitchen','Bowl-shaped object detected.'],fork:['Fork','Utensil','Fork-shaped utensil detected.'],knife:['Knife','Utensil','Knife-shaped utensil detected.'],spoon:['Spoon','Utensil','Spoon-shaped utensil detected.'],book:['Book','Object','Book-shaped object detected.'],clock:['Clock','Object','Clock-shaped object detected.'],vase:['Vase','Object','Vase-shaped object detected.'],scissors:['Scissors','Tool','Scissors-shaped tool detected.'],['laptop computer']:['Laptop','Electronics','Portable computer detected.'],['computer mouse']:['Computer mouse','Electronics','Mouse detected.'],['computer keyboard']:['Keyboard','Electronics','Keyboard detected.'],smartphone:['Smartphone','Electronics','Mobile phone detected.'],['remote control']:['Remote control','Electronics','Remote-control object detected.'],television:['Television','Electronics','Display detected.'],camera:['Camera','Electronics','Camera detected.'],headphones:['Headphones','Electronics','Headphones detected.'],watch:['Watch','Wearable','Wristwatch detected.'],chair:['Chair','Furniture','Chair detected.'],couch:['Couch','Furniture','Sofa detected.'],['dining table']:['Dining table','Furniture','Table detected.'],bed:['Bed','Furniture','Bed detected.'],lamp:['Lamp','Home','Lamp detected.'],refrigerator:['Refrigerator','Appliance','Refrigerator detected.'],microwave:['Microwave','Appliance','Microwave detected.'],oven:['Oven','Appliance','Oven detected.'],toaster:['Toaster','Appliance','Toaster detected.'],plant:['Plant','Nature','Plant detected.'],flower:['Flower','Nature','Flower detected.'],['sports ball']:['Sports ball','Sports','Sports ball detected.'],shoe:['Shoe','Clothing','Shoe detected.'],glasses:['Glasses','Wearable','Eyewear detected.'],food:['Food','Food','Food item detected.'],cake:['Cake','Food','Cake detected.'],pizza:['Pizza','Food','Pizza detected.'],fruit:['Fruit','Food','Fruit detected.'],box:['Box','Object','Box-shaped object detected.'],tool:['Tool','Tool','Tool-like object detected.'],helmet:['Helmet','Safety gear','Helmet detected.'],charger:['Charger','Electronics','Charger/power adapter detected.']};
+
+let stream=null,facing='environment',fastModel=null,aiModel=null,running=false,busyFast=false,busyAI=false,autoAI=false,forceAI=false,customLabels=[];
+let tracks=[],nextId=1,lastFps=performance.now(),frames=0,shownFps=0,lastFast=0,lastAI=0;
+const FAST_INTERVAL=420,AI_INTERVAL=2200,HOLD=1500,FAST_SCORE=.34,AI_SCORE=.27;
+let overlayW=1,overlayH=1;
+
+env.allowRemoteModels=true;env.allowLocalModels=false;env.useBrowserCache=true;env.useWasmCache=true;env.cacheKey='neurolens-transformers-v2';
+if(env.backends?.onnx?.wasm)env.backends.onnx.wasm.numThreads=Math.min(2,Math.max(1,(navigator.hardwareConcurrency||2)-1));
+
+function setMessage(t,s,button=false){msgTitle.textContent=t;msgText.textContent=s;startBtn.style.display=button?'inline-block':'none';msg.classList.remove('hidden')}
+function hideMessage(){msg.classList.add('hidden')}
+function pretty(s){return s.replace(/^a /,'').replace(/\.$/,'').replace(/\b\w/g,c=>c.toUpperCase())}
+function infoFor(l){return INFO[l]||[pretty(l),'Object',`Visual match for “${l}”.`]}
+function iou(a,b){const x1=Math.max(a[0],b[0]),y1=Math.max(a[1],b[1]),x2=Math.min(a[2],b[2]),y2=Math.min(a[3],b[3]);const inter=Math.max(0,x2-x1)*Math.max(0,y2-y1);const aa=Math.max(1,a[2]-a[0])*Math.max(1,a[3]-a[1]);const ab=Math.max(1,b[2]-b[0])*Math.max(1,b[3]-b[1]);return inter/Math.max(1,aa+ab-inter)}
+function center(b){return[(b[0]+b[2])/2,(b[1]+b[3])/2]}
+function dist(a,b){const A=center(a),B=center(b);return Math.hypot(A[0]-B[0],A[1]-B[1])}
+function area(b){return Math.max(1,b[2]-b[0])*Math.max(1,b[3]-b[1])}
+
+function resize(){overlayW=Math.max(1,overlay.clientWidth);overlayH=Math.max(1,overlay.clientHeight);overlay.width=Math.round(overlayW*devicePixelRatio);overlay.height=Math.round(overlayH*devicePixelRatio);ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0)}
+addEventListener('resize',resize);resize();
+
+async function camera(){if(stream)stream.getTracks().forEach(t=>t.stop());stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing},width:{ideal:960},height:{ideal:540},frameRate:{ideal:30,max:30}},audio:false});video.srcObject=stream;await video.play();resize()}
+
+async function loadFast(){
+try{await tf.ready();try{await tf.setBackend('webgl')}catch{}await tf.ready();modelEl.textContent='LITE COCO-SSD';fastModel=await cocoSsd.load({base:'lite_mobilenet_v2'});$('modelLine').textContent='LITE TRACKER / DINO ON DEMAND'}catch(e){modelEl.textContent='FAST FALLBACK';console.warn(e)}
+}
+
+async function cacheStatus(){try{if('caches' in window){const c=await caches.open('neurolens-transformers-v2');const keys=await c.keys();cacheEl.textContent=keys.length?'CACHED':'READY';}else cacheEl.textContent='BROWSER';}catch{cacheEl.textContent='READY'}}
+
+async function loadAI(){
+if(aiModel)return true;
+dot.classList.add('busy');status.textContent='LOADING AI';$('modePill').textContent='DINO WARMING';
+try{
+const attempts=navigator.gpu?[{device:'webgpu',dtype:'q4f16'},{device:'webgpu',dtype:'q4'}]:[];
+attempts.push({device:'wasm',dtype:'uint8'});
+for(const opt of attempts){try{
+aiModel=await pipeline('zero-shot-object-detection','onnx-community/grounding-dino-tiny-ONNX',{...opt,progress_callback:p=>{if(p?.status==='progress'&&Number.isFinite(p.progress)){msgTitle.textContent='PREPARING AI VERIFICATION';msgText.textContent=`First-time model download ${Math.round(p.progress)}% — camera remains active.`}}});
+modelEl.textContent='DINO TINY';cacheEl.textContent='CACHED';$('modePill').textContent='DINO READY';return true;
+}catch(e){console.warn('DINO attempt failed',opt,e)}}
+}catch(e){console.warn(e)}
+finally{dot.classList.remove('busy');if(running)status.textContent='LIVE'}
+return false
+}
+
+function fastFrame(){const vw=video.videoWidth||640,vh=video.videoHeight||360;const w=Math.min(384,vw),h=Math.max(1,Math.round(w*vh/vw));if(fastCanvas.width!==w||fastCanvas.height!==h){fastCanvas.width=w;fastCanvas.height=h}fastCtx.drawImage(video,0,0,w,h);return{canvas:fastCanvas,w,h}}
+function aiFrame(){const vw=video.videoWidth||640,vh=video.videoHeight||360;const w=Math.min(512,vw),h=Math.max(1,Math.round(w*vh/vw));if(aiCanvas.width!==w||aiCanvas.height!==h){aiCanvas.width=w;aiCanvas.height=h}aiCtx.drawImage(video,0,0,w,h);return{canvas:aiCanvas,w,h}}
+
+function stabilize(ds,w,h,source){
+ const now=performance.now(),used=new Set();
+ for(const t of tracks){
+  let best=-1,bs=-Infinity;
+  ds.forEach((d,i)=>{
+   if(used.has(i))return;
+   const ov=iou(t.box,d.box);
+   const dd=dist(t.box,d.box)/Math.max(35,Math.hypot(t.box[2]-t.box[0],t.box[3]-t.box[1]));
+   const same=t.label===d.label;
+   const score=ov*2.5+(same?.6:0)-dd*.7+d.score*.35;
+   if((ov>.1||dd<.8)&&score>bs){bs=score;best=i}
+  });
+  if(best>=0){
+   const d=ds[best]; used.add(best);
+   if(d.label!==t.label){
+    if(t.pendingLabel===d.label)t.pendingCount++;
+    else{t.pendingLabel=d.label;t.pendingCount=1}
+    if(t.pendingCount>=2||d.score>t.score+.16){t.label=d.label;t.pendingLabel='';t.pendingCount=0}
+   }else{t.pendingLabel='';t.pendingCount=0}
+   const blend=source==='AI'?.65:.35,old=t.box;
+   const nb=t.box.map((v,i)=>v*(1-blend)+d.box[i]*blend);
+   t.vx=(nb[0]-old[0])*.7;t.vy=(nb[1]-old[1])*.7;
+   t.box=nb;t.score=Math.max(d.score,t.score*.82);t.lastSeen=now;
+   t.source=source==='AI'?'AI VERIFIED':'FAST TRACK';
+  }
+ }
+ for(let i=0;i<ds.length;i++)if(!used.has(i)){
+  const d=ds[i];
+  tracks.push({id:nextId++,label:d.label,score:d.score,box:d.box.slice(),lastSeen:now,vx:0,vy:0,source,pendingLabel:'',pendingCount:0});
+ }
+ tracks=tracks.filter(t=>now-t.lastSeen<HOLD).sort((a,b)=>area(b.box)*b.score-area(a.box)*a.score).slice(0,5);
+ tracks.forEach(t=>{
+  const age=now-t.lastSeen;
+  if(age>260){
+   const dt=Math.min(1,(now-t.lastSeen)/1000);
+   t.box[0]+=t.vx*dt;t.box[2]+=t.vx*dt;t.box[1]+=t.vy*dt;t.box[3]+=t.vy*dt;t.score*=.995;
+  }
+ });
+ render();
+}
+
+async function fastScan(){
+if(!fastModel||busyFast||busyAI||!running||!video.videoWidth)return;const now=performance.now();if(now-lastFast<FAST_INTERVAL)return;lastFast=now;busyFast=true;
+try{const{canvas,w,h}=fastFrame();const p=await fastModel.detect(canvas,5,FAST_SCORE);const ds=p.filter(x=>x.score>=FAST_SCORE).map(x=>({label:x.class,score:x.score,box:[x.bbox[0],x.bbox[1],x.bbox[0]+x.bbox[2],x.bbox[1]+x.bbox[3]],source:'FAST'})).filter(x=>area(x.box)>350);stabilize(ds,w,h,'FAST')}catch(e){console.warn(e)}finally{busyFast=false}
+}
+
+async function aiScan(force=false){
+if(busyAI||!running||!video.videoWidth)return;const now=performance.now();if(!force&&!autoAI)return;if(!force&&now-lastAI<AI_INTERVAL)return;lastAI=now;busyAI=true;
+try{if(!aiModel){const ok=await loadAI();if(!ok)return}const{canvas,w,h}=aiFrame();const labels=(customLabels.length?customLabels:LABELS).slice(0,24).map(x=>`a ${x.replace(/[.]/g,'')}.`);const out=await aiModel(canvas,labels,{top_k:8,threshold:AI_SCORE,percentage:false});const ds=out.map(x=>({label:pretty(x.label).toLowerCase(),score:Number(x.score)||0,box:[x.box.xmin,x.box.ymin,x.box.xmax,x.box.ymax],source:'AI'})).filter(x=>x.score>=AI_SCORE&&area(x.box)>500);stabilize(ds,w,h,'AI')}catch(e){console.warn('DINO',e)}finally{busyAI=false}
+}
+
+function mapBox(b){
+const cw=aiCanvas.width||fastCanvas.width||1,ch=aiCanvas.height||fastCanvas.height||1;
+const vw=video.videoWidth||cw,vh=video.videoHeight||ch;
+const sx=overlayW/vw,sy=overlayH/vh,scale=Math.max(sx,sy),cropX=(vw*scale-overlayW)/2,cropY=(vh*scale-overlayH)/2;
+return[b[0]*(vw/cw)*scale-cropX,b[1]*(vh/ch)*scale-cropY,b[2]*(vw/cw)*scale-cropX,b[3]*(vh/ch)*scale-cropY]
+}
+function draw(){
+ctx.clearRect(0,0,overlayW,overlayH);const now=performance.now();
+tracks.forEach((t,i)=>{const age=now-t.lastSeen,b=mapBox(t.box);if(b[2]<0||b[3]<0||b[0]>overlayW||b[1]>overlayH)return;ctx.globalAlpha=Math.max(.28,1-age/HOLD);ctx.lineWidth=i===0?2:1.2;ctx.strokeStyle=i===0?'#66e7f7':'#66e7f777';const x=Math.max(0,b[0]),y=Math.max(0,b[1]),ww=Math.min(overlayW,b[2])-x,hh=Math.min(overlayH,b[3])-y;if(ww<3||hh<3)return;const c=10;ctx.beginPath();ctx.moveTo(x,y+c);ctx.lineTo(x,y);ctx.lineTo(x+c,y);ctx.moveTo(x+ww-c,y);ctx.lineTo(x+ww,y);ctx.lineTo(x+ww,y+c);ctx.moveTo(x,y+hh-c);ctx.lineTo(x,y+hh);ctx.lineTo(x+c,y+hh);ctx.moveTo(x+ww-c,y+hh);ctx.lineTo(x+ww,y+hh);ctx.lineTo(x+ww,y+hh-c);ctx.stroke();ctx.font='800 11px Inter,Arial';const text=`${pretty(t.label)}  ${Math.round(t.score*100)}%`,tw=ctx.measureText(text).width+14;ctx.fillStyle='#031014e8';ctx.fillRect(x,y-23,Math.min(tw,overlayW-x),21);ctx.fillStyle='#66e7f7';ctx.fillText(text,x+7,y-9);ctx.globalAlpha=1})
+}
+function render(){
+const now=performance.now(),valid=tracks.filter(t=>now-t.lastSeen<HOLD);count.textContent=valid.length;const p=valid[0];confEl.textContent=p?`${Math.round(p.score*100)}%`:'—';
+if(!valid.length){list.innerHTML='<div class="empty"><strong>SEARCHING</strong><span>Move an object into view. Labels remain briefly during camera motion instead of disappearing instantly.</span></div>';return}
+list.innerHTML=valid.map((t,i)=>{const inf=infoFor(t.label),held=now-t.lastSeen>280;return`<div class="card ${i===0?'primary':''}"><div class="top"><div><div class="eyebrow">${t.source}</div><div class="name">${pretty(t.label)}</div></div><div class="score">${Math.round(t.score*100)}<small>%</small></div></div><div class="meter"><i style="width:${Math.max(5,Math.min(100,t.score*100))}%"></i></div><div class="grid"><div><label>CATEGORY</label><b>${inf[1]}</b></div><div><label>STATE</label><b>${held?'TRACK HELD':'LOCKED'}</b></div></div><p class="desc">${inf[2]}</p>${held?'<div class="hold">TRACKING THROUGH MOTION</div>':''}</div>`}).join('')
+}
+function loop(t){frames++;if(t-lastFps>=1000){shownFps=Math.round(frames*1000/(t-lastFps));frames=0;lastFps=t;fpsEl.textContent=String(shownFps)}draw();fastScan();if(autoAI)aiScan(false);requestAnimationFrame(loop)}
+
+async function start(){
+if(!navigator.mediaDevices?.getUserMedia){setMessage('HTTPS REQUIRED','Open this scanner from HTTPS or localhost.',false);return}
+try{setMessage('STARTING CAMERA','The live preview starts immediately. DINO stays off until AI verification is requested.');await camera();hideMessage();running=true;status.textContent='LIVE';requestAnimationFrame(loop);loadFast();cacheStatus()}catch(e){console.error(e);setMessage('CAMERA ACCESS NEEDED','Allow camera permission, then press START SCANNER.',true)}
+}
+
+startBtn.onclick=start;
+scanBtn.onclick=()=>aiScan(true);
+autoBtn.onclick=async()=>{autoAI=!autoAI;autoBtn.textContent=`AUTO: ${autoAI?'ON':'OFF'}`;if(autoAI){await loadAI();lastAI=0;status.textContent='AI AUTO'}else status.textContent='LIVE'};
+focusBtn.onclick=async()=>{customLabels=(custom.value||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean).slice(0,12);if(customLabels.length){await loadAI();aiScan(true)}};
+custom.addEventListener('keydown',e=>{if(e.key==='Enter')focusBtn.click()});
+switchBtn.onclick=async()=>{facing=facing==='environment'?'user':'environment';try{await camera()}catch(e){console.warn(e)}};
+
+(async()=>{try{await start()}catch(e){console.error(e)}})();
+</script>
+</body>
+</html>
