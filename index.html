@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05090d">
+<title>NEUROLENS — Smart Vision Scanner</title>
+
+<!-- Stable CDN versions -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3"></script>
+
+<style>
+:root{
+  --bg:#05090d;--panel:#091117;--line:rgba(150,220,230,.18);
+  --text:#eefcff;--muted:#91a9b0;--cyan:#72f6ff;--green:#69f0b5;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+font-family:Inter,Arial,sans-serif}
+.app{height:100dvh;display:flex;flex-direction:column}
+header{height:68px;flex:none;display:flex;align-items:center;justify-content:space-between;
+padding:0 18px;border-bottom:1px solid var(--line);background:#050a0e}
+.brand{display:flex;align-items:center;gap:12px}
+.mark{width:35px;height:35px;border:1px solid #72f6ff;border-radius:10px;position:relative}
+.mark:before,.mark:after{content:"";position:absolute;background:#72f6ff}
+.mark:before{width:17px;height:2px;left:8px;top:16px}
+.mark:after{height:17px;width:2px;left:16px;top:8px}
+h1{font-size:15px;letter-spacing:4px;margin:0}
+.sub{font-size:9px;letter-spacing:2px;color:#8ba1a7;margin-top:4px}
+.status{display:flex;align-items:center;gap:8px;color:#9eb0b5;font-size:10px;letter-spacing:1px}
+.dot{width:8px;height:8px;border-radius:50%;background:#69f0b5;box-shadow:0 0 12px #69f0b5}
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 355px;gap:12px;padding:12px}
+.viewport{position:relative;min-width:0;min-height:0;overflow:hidden;border:1px solid var(--line);
+border-radius:18px;background:#000}
+#webcam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+#overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.hud{position:absolute;inset:0;pointer-events:none}
+.pill{position:absolute;top:14px;padding:8px 11px;border:1px solid rgba(114,246,255,.25);
+background:rgba(4,12,17,.72);border-radius:8px;font-size:9px;letter-spacing:1.5px;color:#b8c9cc}
+.left{left:14px}.right{right:14px}
+.reticle{position:absolute;left:50%;top:50%;width:94px;height:94px;transform:translate(-50%,-50%);
+border:1px solid rgba(114,246,255,.28);border-radius:50%}
+.reticle:before{content:"";position:absolute;left:42px;top:28px;width:1px;height:38px;background:#72f6ff88}
+.reticle:after{content:"";position:absolute;left:28px;top:42px;width:38px;height:1px;background:#72f6ff88}
+.sweep{position:absolute;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#72f6ff,transparent);
+box-shadow:0 0 15px #72f6ff88;animation:sweep 3.5s ease-in-out infinite}
+@keyframes sweep{0%{top:7%}50%{top:93%}100%{top:7%}}
+.bottom{position:absolute;bottom:14px;left:14px;right:14px;display:flex;justify-content:space-between;
+font-size:9px;letter-spacing:1.4px;color:#b2c2c5}
+.camera-message{position:absolute;inset:0;z-index:4;display:grid;place-items:center;
+background:rgba(2,7,10,.8);text-align:center;padding:30px}
+.camera-message.hidden{display:none}
+.message-box{max-width:350px}
+.message-box strong{display:block;color:#72f6ff;letter-spacing:2px;font-size:13px}
+.message-box span{display:block;color:#a5b5b9;font-size:11px;line-height:1.5;margin:9px 0 16px}
+button{border:1px solid #72f6ff;background:#72f6ff;color:#031014;border-radius:9px;
+padding:11px 18px;font-weight:800;letter-spacing:1px;cursor:pointer}
+button.secondary{background:transparent;color:#72f6ff;margin-left:6px}
+.panel{min-width:0;display:flex;flex-direction:column;background:#091117;border:1px solid var(--line);
+border-radius:18px;overflow:hidden}
+.panel-head{padding:16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+.panel-head h2{font-size:12px;letter-spacing:2px;margin:0 0 5px}
+.panel-head small{font-size:9px;color:#8da1a7}
+.detection-list{flex:1;overflow:auto;padding:12px}
+.card{padding:14px;margin-bottom:10px;border:1px solid var(--line);border-radius:13px;background:#0c161d}
+.card.primary{border-color:#72f6ff55;box-shadow:0 0 25px #72f6ff0b}
+.cardtop{display:flex;justify-content:space-between;gap:10px}
+.eyebrow{font-size:8px;letter-spacing:1.4px;color:#72f6ff}
+.card h3{font-size:17px;margin:5px 0 0}
+.conf{font-size:20px;font-weight:800;color:#72f6ff}
+.conf small{font-size:9px}
+.meter{height:3px;background:#ffffff10;border-radius:4px;margin:11px 0}
+.meter i{display:block;height:100%;background:#72f6ff;border-radius:4px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.grid div{background:#ffffff05;padding:7px;border-radius:7px}
+.grid label{display:block;font-size:7px;color:#778d93;letter-spacing:1px}
+.grid b{display:block;font-size:10px;margin-top:3px}
+.card p{font-size:10px;line-height:1.45;color:#b2c2c6;margin:10px 0 0}
+.empty{text-align:center;padding:50px 18px;color:#91a9b0}
+.empty strong{display:block;color:#72f6ff;font-size:12px;letter-spacing:1.5px}
+.empty span{display:block;font-size:10px;margin-top:8px;line-height:1.5}
+.error{color:#ff9d9d;text-align:center;padding:25px;font-size:11px;line-height:1.5}
+.panel-foot{padding:10px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.stat{padding:8px;background:#ffffff04;border-radius:8px}
+.stat label{display:block;font-size:7px;color:#80969c;letter-spacing:1px}
+.stat b{display:block;font-size:10px;margin-top:3px}
+.controls{padding:9px 12px;border-top:1px solid var(--line);display:flex;gap:7px}
+.controls button{font-size:9px;padding:9px 10px;flex:1}
+footer{height:25px;flex:none;border-top:1px solid var(--line);display:flex;align-items:center;
+padding:0 12px;color:#71878d;font-size:8px;letter-spacing:1px}
+@media(max-width:850px){
+ header{height:62px;padding:0 12px}
+ main{display:flex;flex-direction:column;padding:7px;gap:7px}
+ .viewport{height:58vh;min-height:300px;flex:none}
+ .panel{height:calc(42vh - 7px);min-height:230px;flex:none}
+ .panel-foot{grid-template-columns:1fr 1fr}
+ footer{display:none}
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+<header>
+  <div class="brand">
+    <div class="mark"></div>
+    <div><h1>NEUROLENS</h1><div class="sub">SMART VISION / OBJECT INTELLIGENCE</div></div>
+  </div>
+  <div class="status"><i class="dot"></i><span id="status">STARTING</span></div>
+</header>
+
+<main>
+<section class="viewport">
+  <video id="webcam" autoplay muted playsinline></video>
+  <canvas id="overlay"></canvas>
+
+  <div class="hud">
+    <span class="pill left">LIVE CAMERA</span>
+    <span class="pill right">AUTO TRACK</span>
+    <div class="reticle"></div>
+    <div class="sweep"></div>
+    <div class="bottom"><span>AI VISION ACTIVE</span><span>THRESHOLD <b id="thresholdText">25%</b></span></div>
+  </div>
+
+  <div id="cameraMessage" class="camera-message">
+    <div class="message-box">
+      <strong id="messageTitle">STARTING VISION ENGINE</strong>
+      <span id="messageText">Preparing camera and object-recognition model…</span>
+      <button id="startButton" style="display:none">START SCANNER</button>
+    </div>
+  </div>
+</section>
+
+<aside class="panel">
+  <div class="panel-head">
+    <div><h2>OBJECT INTELLIGENCE</h2><small>LIVE DETECTIONS</small></div>
+    <small><span id="count">0</span> TARGETS</small>
+  </div>
+
+  <div id="list" class="detection-list">
+    <div class="empty"><strong>INITIALIZING VISION</strong><span>Loading recognition engine…</span></div>
+  </div>
+
+  <div class="controls">
+    <button id="scanButton">SCAN NOW</button>
+    <button id="switchButton" class="secondary">SWITCH CAMERA</button>
+  </div>
+
+  <div class="panel-foot">
+    <div class="stat"><label>MODEL</label><b id="model">LOADING</b></div>
+    <div class="stat"><label>AVG CONFIDENCE</label><b id="confidence">—</b></div>
+    <div class="stat"><label>FPS</label><b id="fps">—</b></div>
+    <div class="stat"><label>ENGINE</label><b id="engine">WEBGL</b></div>
+  </div>
+</aside>
+</main>
+
+<footer>NEUROLENS • VISUAL CLASSIFICATION IS PROBABILISTIC — EXACT IDENTITY REQUIRES SPECIALIZED MODELS.</footer>
+</div>
+
+<script>
+"use strict";
+
+const video=document.getElementById("webcam");
+const canvas=document.getElementById("overlay");
+const ctx=canvas.getContext("2d");
+const list=document.getElementById("list");
+const statusEl=document.getElementById("status");
+const countEl=document.getElementById("count");
+const confEl=document.getElementById("confidence");
+const fpsEl=document.getElementById("fps");
+const modelEl=document.getElementById("model");
+const engineEl=document.getElementById("engine");
+const cameraMessage=document.getElementById("cameraMessage");
+const messageTitle=document.getElementById("messageTitle");
+const messageText=document.getElementById("messageText");
+const startButton=document.getElementById("startButton");
+const scanButton=document.getElementById("scanButton");
+const switchButton=document.getElementById("switchButton");
+
+let model=null;
+let stream=null;
+let running=false;
+let facing="environment";
+let busy=false;
+let lastTime=performance.now();
+let fps=0;
+let lastPredictions=[];
+let lastDraw=0;
+
+const INFO={
+ person:["Person","Living subject","Human figure detected.","human"],
+ bicycle:["Bicycle","Vehicle","Two-wheeled pedal vehicle.","mobility"],
+ car:["Car","Vehicle","Four-wheeled road vehicle.","transport"],
+ motorcycle:["Motorcycle","Vehicle","Powered two-wheeled road vehicle.","transport"],
+ bus:["Bus","Vehicle","Large passenger road vehicle.","transport"],
+ truck:["Truck","Vehicle","Cargo road vehicle.","transport"],
+ train:["Train","Transport","Rail vehicle detected.","transport"],
+ airplane:["Airplane","Aircraft","Fixed-wing aircraft detected.","aviation"],
+ boat:["Boat","Watercraft","Watercraft detected.","watercraft"],
+ bird:["Bird","Animal","Bird visual class detected.","animal"],
+ cat:["Cat","Animal","Cat visual class detected.","animal"],
+ dog:["Dog","Animal","Dog visual class detected.","animal"],
+ horse:["Horse","Animal","Horse visual class detected.","animal"],
+ backpack:["Backpack","Personal item","Backpack-shaped object detected.","personal"],
+ umbrella:["Umbrella","Personal item","Umbrella-shaped object detected.","personal"],
+ handbag:["Handbag","Personal item","Handbag-shaped object detected.","personal"],
+ suitcase:["Suitcase","Travel item","Luggage-shaped object detected.","travel"],
+ bottle:["Bottle","Container","Bottle-shaped container detected.","container"],
+ cup:["Cup","Drinkware","Cup-shaped object detected.","drinkware"],
+ fork:["Fork","Utensil","Fork-shaped utensil detected.","utensil"],
+ knife:["Knife","Utensil","Knife-shaped object detected.","utensil"],
+ spoon:["Spoon","Utensil","Spoon-shaped utensil detected.","utensil"],
+ bowl:["Bowl","Kitchenware","Bowl-shaped object detected.","kitchen"],
+ laptop:["Laptop","Electronics","Portable computer detected.","electronics"],
+ mouse:["Computer mouse","Electronics","Computer mouse detected.","electronics"],
+ remote:["Remote control","Electronics","Remote-control object detected.","electronics"],
+ keyboard:["Keyboard","Electronics","Computer keyboard detected.","electronics"],
+ cell_phone:["Mobile phone","Electronics","Mobile phone detected.","electronics"],
+ tv:["Television","Electronics","Display/television detected.","electronics"],
+ microwave:["Microwave","Appliance","Microwave-shaped appliance detected.","appliance"],
+ oven:["Oven","Appliance","Oven-shaped appliance detected.","appliance"],
+ toaster:["Toaster","Appliance","Toaster-shaped appliance detected.","appliance"],
+ refrigerator:["Refrigerator","Appliance","Refrigerator-shaped appliance detected.","appliance"],
+ book:["Book","Object","Book-shaped printed material detected.","object"],
+ clock:["Clock","Object","Clock-shaped object detected.","object"],
+ vase:["Vase","Object","Vase-shaped object detected.","object"],
+ scissors:["Scissors","Tool","Scissors-shaped tool detected.","tool"],
+ chair:["Chair","Furniture","Chair-shaped furniture detected.","furniture"],
+ couch:["Couch","Furniture","Sofa/couch detected.","furniture"],
+ bed:["Bed","Furniture","Bed-shaped furniture detected.","furniture"],
+ dining_table:["Dining table","Furniture","Table-shaped furniture detected.","furniture"],
+ toilet:["Toilet","Fixture","Bathroom fixture detected.","fixture"],
+ sports_ball:["Sports ball","Sports equipment","Sports ball detected.","sports"],
+ skateboard:["Skateboard","Sports equipment","Skateboard detected.","sports"],
+ surfboard:["Surfboard","Sports equipment","Surfboard detected.","sports"],
+ frisbee:["Frisbee","Sports equipment","Flying disc detected.","sports"],
+ racket:["Racket","Sports equipment","Sports racket detected.","sports"],
+ banana:["Banana","Food","Banana-shaped food item detected.","food"],
+ apple:["Apple","Food","Apple-shaped food item detected.","food"],
+ sandwich:["Sandwich","Food","Sandwich-shaped food item detected.","food"],
+ orange:["Orange","Food","Orange-shaped fruit detected.","food"],
+ broccoli:["Broccoli","Food","Broccoli visual class detected.","food"],
+ carrot:["Carrot","Food","Carrot visual class detected.","food"],
+ pizza:["Pizza","Food","Pizza visual class detected.","food"],
+ donut:["Donut","Food","Donut visual class detected.","food"],
+ cake:["Cake","Food","Cake visual class detected.","food"],
+ teddy_bear:["Teddy bear","Toy","Plush toy detected.","toy"]
+};
+
+function info(name){
+ return INFO[name] || ["Detected object","Unknown category","Visual object detected. A more specialized model is required for exact identification.","unknown"];
+}
+
+function escapeHTML(v){
+ return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+async function chooseBackend(){
+ try{
+   if(window.tf && tf.findBackend("webgl")){
+     await tf.setBackend("webgl");
+     await tf.ready();
+     engineEl.textContent="WEBGL";
+     return;
+   }
+ }catch(e){}
+ try{
+   await tf.setBackend("cpu");
+   await tf.ready();
+   engineEl.textContent="CPU";
+ }catch(e){
+   throw new Error("TensorFlow engine could not start.");
+ }
+}
+
+async function startCamera(){
+ if(stream){
+   stream.getTracks().forEach(t=>t.stop());
+   stream=null;
+ }
+ if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+   throw new Error("Camera API is unavailable. Open the site using HTTPS.");
+ }
+
+ stream=await navigator.mediaDevices.getUserMedia({
+   video:{
+     facingMode:{ideal:facing},
+     width:{ideal:1280,min:640},
+     height:{ideal:720,min:480},
+     frameRate:{ideal:30,max:30}
+   },
+   audio:false
+ });
+
+ video.srcObject=stream;
+ await new Promise(resolve=>{
+   if(video.readyState>=1) resolve();
+   else video.onloadedmetadata=resolve;
+ });
+ await video.play();
+ resizeCanvas();
+}
+
+function resizeCanvas(){
+ if(!video.videoWidth || !video.videoHeight)return;
+ canvas.width=video.videoWidth;
+ canvas.height=video.videoHeight;
+}
+
+async function startModel(){
+ statusEl.textContent="LOADING AI";
+ modelEl.textContent="LOADING";
+ await chooseBackend();
+
+ // lite_mobilenet_v2 is much faster on phones while retaining COCO-SSD's object vocabulary.
+ model=await cocoSsd.load({base:"lite_mobilenet_v2"});
+ modelEl.textContent="COCO-SSD LITE";
+ statusEl.textContent="LIVE SCAN";
+}
+
+function draw(predictions){
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ predictions.forEach((p,i)=>{
+   const [x,y,w,h]=p.bbox;
+   const color=i===0?"#72f6ff":"#ffffff";
+   const s=Math.max(14,Math.min(34,Math.min(w,h)*.18));
+
+   ctx.strokeStyle=color;
+   ctx.lineWidth=i===0?3:2;
+   ctx.shadowColor=color;
+   ctx.shadowBlur=i===0?14:7;
+   ctx.beginPath();
+   ctx.moveTo(x,y+s);ctx.lineTo(x,y);ctx.lineTo(x+s,y);
+   ctx.moveTo(x+w-s,y);ctx.lineTo(x+w,y);ctx.lineTo(x+w,y+s);
+   ctx.moveTo(x,y+h-s);ctx.lineTo(x,y+h);ctx.lineTo(x+s,y+h);
+   ctx.moveTo(x+w-s,y+h);ctx.lineTo(x+w,y+h);ctx.lineTo(x+w,y+h-s);
+   ctx.stroke();
+   ctx.shadowBlur=0;
+
+   const label=info(p.class)[0]+" "+Math.round(p.score*100)+"%";
+   ctx.font="600 13px Arial";
+   const width=ctx.measureText(label).width+18;
+   const ly=Math.max(5,y-30);
+   ctx.fillStyle="rgba(3,12,17,.92)";
+   ctx.fillRect(x,ly,width,25);
+   ctx.fillStyle=color;
+   ctx.fillRect(x,ly,3,25);
+   ctx.fillStyle="#fff";
+   ctx.fillText(label,x+9,ly+17);
+ });
+}
+
+function render(predictions){
+ countEl.textContent=predictions.length;
+ if(!predictions.length){
+   confEl.textContent="—";
+   list.innerHTML='<div class="empty"><strong>SEARCHING SCENE</strong><span>Move the camera slowly toward a clear, well-lit object. The scanner accepts detections from 25% confidence.</span></div>';
+   return;
+ }
+
+ const avg=Math.round(predictions.reduce((a,p)=>a+p.score,0)/predictions.length*100);
+ confEl.textContent=avg+"%";
+ list.innerHTML=predictions.map((p,i)=>{
+   const d=info(p.class), pct=Math.round(p.score*100);
+   return `<article class="card ${i===0?"primary":""}">
+     <div class="cardtop">
+       <div><span class="eyebrow">${i===0?"PRIMARY TARGET":"SECONDARY TARGET"}</span><h3>${escapeHTML(d[0])}</h3></div>
+       <div class="conf">${pct}<small>%</small></div>
+     </div>
+     <div class="meter"><i style="width:${pct}%"></i></div>
+     <div class="grid">
+       <div><label>CLASS</label><b>${escapeHTML(d[1])}</b></div>
+       <div><label>TYPE</label><b>${escapeHTML(d[3])}</b></div>
+     </div>
+     <p>${escapeHTML(d[2])}</p>
+   </article>`;
+ }).join("");
+}
+
+async function scanOnce(){
+ if(!model || !video.videoWidth){
+   return;
+ }
+ try{
+   // 0.25 catches more objects than the previous 0.42 threshold.
+   // The UI still shows the exact confidence score.
+   const predictions=await model.detect(video,20,0.25);
+
+   // Keep only useful detections and remove tiny accidental boxes.
+   const minArea=video.videoWidth*video.videoHeight*0.0012;
+   lastPredictions=predictions
+     .filter(p=>p.score>=0.25 && p.bbox[2]*p.bbox[3]>=minArea)
+     .sort((a,b)=>b.score-a.score)
+     .slice(0,8);
+
+   draw(lastPredictions);
+   render(lastPredictions);
+ }catch(err){
+   console.error("Detection error:",err);
+   statusEl.textContent="DETECTION ERROR";
+   list.innerHTML=`<div class="error"><b>AI DETECTION ERROR</b><br>${escapeHTML(err.message||String(err))}<br><br>Try reloading the page.</div>`;
+ }
+}
+
+async function loop(now){
+ if(!running)return;
+
+ const delta=now-lastTime;
+ lastTime=now;
+ fps=fps*.9+(1000/Math.max(delta,1))*.1;
+ fpsEl.textContent=Math.round(Math.min(fps,60));
+
+ if(!busy && video.readyState>=2){
+   busy=true;
+   await scanOnce();
+   busy=false;
+ }
+ requestAnimationFrame(loop);
+}
+
+async function boot(){
+ try{
+   messageTitle.textContent="STARTING VISION ENGINE";
+   messageText.textContent="Requesting camera permission and loading the recognition model…";
+
+   await startCamera();
+   await startModel();
+
+   cameraMessage.classList.add("hidden");
+   running=true;
+   requestAnimationFrame(loop);
+ }catch(err){
+   console.error(err);
+   statusEl.textContent="ACTION REQUIRED";
+   messageTitle.textContent="SCANNER NEEDS PERMISSION";
+   messageText.textContent=err.message || "Allow camera access, then press Start Scanner.";
+   startButton.style.display="inline-block";
+   list.innerHTML=`<div class="error">${escapeHTML(err.message||String(err))}</div>`;
+ }
+}
+
+startButton.onclick=async()=>{
+ startButton.disabled=true;
+ try{await boot()}finally{startButton.disabled=false}
+};
+
+scanButton.onclick=async()=>{
+ if(!model){
+   await boot();
+ }else{
+   await scanOnce();
+ }
+};
+
+switchButton.onclick=async()=>{
+ facing=facing==="environment"?"user":"environment";
+ try{
+   await startCamera();
+   await scanOnce();
+ }catch(err){
+   messageTitle.textContent="CAMERA SWITCH FAILED";
+   messageText.textContent=err.message;
+   cameraMessage.classList.remove("hidden");
+ }
+};
+
+window.addEventListener("resize",resizeCanvas);
+video.addEventListener("loadedmetadata",resizeCanvas);
+
+boot();
+</script>
+</body>
+</html>
